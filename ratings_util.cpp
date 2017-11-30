@@ -1,61 +1,123 @@
+#include <algorithm>
 #include "ratings_util.h"
 
-RatingsMatrixCSR * readInputRatings(const char * file) {
-   
-    ifstream ratings_file;
-    //open the ratigns file
-    ratings_file.open(file);
+RatingsMatrixCSR *readInputRatings(string file) {
+
+    ifstream ratingsFile;
+    //open the ratings file
+    ratingsFile.open(file);
 
     string line;
     int curr_userid = -1;
-    unsigned int total_ratings = 0;    
+    unsigned int total_ratings = 0;
 
-    RatingsMatrixCSR * ratings_matrix = (RatingsMatrixCSR *) malloc(sizeof(RatingsMatrixCSR));
+    auto *ratingsMatrix = (RatingsMatrixCSR *) malloc(sizeof(RatingsMatrixCSR));
 
-    ratings_file >> line;//header
-    while (ratings_file >> line) {
-        
+    ratingsFile >> line; // header
+
+    vector<ItemRating> itemRatings;
+
+    while (ratingsFile >> line) {
         //update row ptr
-        char * userid = strtok((char *)line.c_str(), ",\n");
-        if (curr_userid != atoi(userid)) {
-            ratings_matrix->row_ptr.push_back(total_ratings);
-            curr_userid = atoi(userid);  
+        char *userId = strtok((char *) line.c_str(), ",\n");
+        if (curr_userid != atoi(userId)) {
+            ratingsMatrix->rowPtrs.push_back(total_ratings);
+            ratingsMatrix->userIds.push_back((unsigned int) atoi(userId));
+            curr_userid = atoi(userId);
+            // sort and add previous users' item-wise ratings
+            sort(itemRatings.begin(), itemRatings.end());
+            for (ItemRating itemRating: itemRatings) {
+                ratingsMatrix->data.push_back(itemRating.rating);
+                ratingsMatrix->cols.push_back(itemRating.item);
+            }
+            itemRatings.clear();
         }
-       
+
         //update col idx 
-        char * itemid = strtok(NULL, ",");
-        unsigned int col_idx = atoi(itemid) - 1;
-        ratings_matrix->cols.push_back(col_idx);
-                 
+        char *itemIdString = strtok(nullptr, ",");
+        auto itemId = (unsigned int) atoi(itemIdString);
+
+//        ratingsMatrix->cols.push_back(itemId);
+
         //update rating
-        char * rating = strtok(NULL, ",");
-        ratings_matrix->data.push_back(atof(rating));
+        char *ratingString = strtok(nullptr, ",");
+        auto rating = (float) atof(ratingString);
+//        ratingsMatrix->data.push_back();
+        itemRatings.push_back(ItemRating{itemId, rating});
 
         //increment ratings
         total_ratings++;
     }
-    ratings_matrix->row_ptr.push_back(total_ratings);
-    return ratings_matrix;
+    ratingsMatrix->rowPtrs.push_back(total_ratings);
+    // sort and add last users' item-wise ratings
+    sort(itemRatings.begin(), itemRatings.end());
+    for (ItemRating itemRating: itemRatings) {
+        ratingsMatrix->data.push_back(itemRating.rating);
+        ratingsMatrix->cols.push_back(itemRating.item);
+    }
+    itemRatings.clear();
+    return ratingsMatrix;
 }
 
 
-void displayRatingMatrix(RatingsMatrixCSR * rating_matrix) {
+void displayRatingMatrix(RatingsMatrixCSR &ratingMatrix) {
     //data
-    cout << "Data:" << endl;  
-    for (int i = 0; i < rating_matrix->data.size(); i++) {
-        cout << rating_matrix->data[i] << " ";
+    cout << "Data:" << endl;
+    for (float i : ratingMatrix.data) {
+        cout << i << " ";
     }
-    cout << endl;     
+    cout << endl;
     //cols
     cout << "Cols:" << endl;
-    for (int i = 0; i < rating_matrix->cols.size(); i++) {
-        cout << rating_matrix->cols[i] << " ";
+    for (unsigned int col : ratingMatrix.cols) {
+        cout << col << " ";
     }
     cout << endl;
     //rows
-    cout << "Row ptr:" << endl;
-    for (int i = 0; i < rating_matrix->row_ptr.size(); i++) {
-        cout << rating_matrix->row_ptr[i] << " ";
+    cout << "Row Ptr:" << endl;
+    for (unsigned int i : ratingMatrix.rowPtrs) {
+        cout << i << " ";
     }
     cout << endl;
+
+    cout << "User Ids:" << endl;
+    for (unsigned int i : ratingMatrix.userIds) {
+        cout << i << " ";
+    }
+    cout << endl;
+}
+
+void initSimilarityMatrix(SimilarityMatrix &similarityMatrix) {
+    similarityMatrix.similarities = (float *) malloc(sizeof(float) * similarityMatrix.length * similarityMatrix.width);
+    memset(similarityMatrix.similarities, 0, sizeof(float) * similarityMatrix.length * similarityMatrix.width);
+}
+
+void displaySimilarityMatrix(SimilarityMatrix &similarityMatrix) {
+    for (unsigned int i = 0; i < similarityMatrix.length; i++) {
+        for (unsigned int j = 0; j < similarityMatrix.width; j++) {
+            unsigned int index = i * similarityMatrix.width + j;
+            cout << similarityMatrix.similarities[index] << " ";
+        }
+        cout << endl;
+    }
+}
+
+void normalizeRatingVectors(RatingsMatrixCSR &ratingsMatrix) {
+    for (unsigned int i = 0; i < ratingsMatrix.rowPtrs.size() - 1; i++) {
+        // for each row, normalize it by subtracting average
+        float mean = 0.f;
+        for (unsigned int j = ratingsMatrix.rowPtrs[i]; j < ratingsMatrix.rowPtrs[i + 1]; j++) {
+            mean += ratingsMatrix.data[j];
+        }
+        mean /= ratingsMatrix.rowPtrs[i + 1] - ratingsMatrix.rowPtrs[i];
+
+        float sumOfSquares = 0.f;
+        for (unsigned int j = ratingsMatrix.rowPtrs[i]; j < ratingsMatrix.rowPtrs[i + 1]; j++) {
+            ratingsMatrix.data[j] -= mean;
+            sumOfSquares += powf(ratingsMatrix.data[j], 2);
+        }
+        // pre-compute and store mean and norm
+        ratingsMatrix.userMean.push_back(mean);
+        ratingsMatrix.userEuclideanNorm.push_back(sqrtf(sumOfSquares));
+    }
 }

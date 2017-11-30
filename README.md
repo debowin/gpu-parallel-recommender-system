@@ -3,5 +3,9 @@ APP Recommender Systems Project
 
 #1
 Compilation Instructions:
-g++ main.cpp ratings_util.cpp
-#Will move to Makefile soon
+
+cmake CMakeLists.txt
+
+OR
+
+Just use [Jetbrains CLion](https://www.jetbrains.com/clion/). One of the best IDEs. Free for students.
