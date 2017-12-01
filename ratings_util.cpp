@@ -1,11 +1,13 @@
 #include <algorithm>
 #include "ratings_util.h"
 
-RatingsMatrixCSR *readInputRatings(string file) {
+RatingsMatrixCSR *readInputRatings(string &file) {
 
     ifstream ratingsFile;
-    //open the ratings file
+    // open the ratings file
     ratingsFile.open(file);
+    if (ratingsFile.fail())
+        throw invalid_argument("Unable to open ratings file ");
 
     string line;
     unsigned int currUserId = 0;
@@ -36,12 +38,9 @@ RatingsMatrixCSR *readInputRatings(string file) {
         char *itemIdString = strtok(nullptr, ",");
         auto itemId = (unsigned int) strtol(itemIdString, nullptr, 10);
 
-//        ratingsMatrix->cols.push_back(itemId);
-
         //update rating
         char *ratingString = strtok(nullptr, ",");
         auto rating = strtof(ratingString, nullptr);
-//        ratingsMatrix->data.push_back();
         itemRatings.push_back(ItemRating{itemId, rating});
 
         //increment ratings
@@ -56,6 +55,31 @@ RatingsMatrixCSR *readInputRatings(string file) {
     }
     itemRatings.clear();
     return ratingsMatrix;
+}
+
+
+map<unsigned int, string> readInputMovies(string &file) {
+    ifstream moviesFile;
+    map<unsigned int, string> movieIdNameMapping;
+    // open the ratings file
+    moviesFile.open(file);
+    if (moviesFile.fail())
+        throw invalid_argument("Unable to open movies file ");
+    string line;
+
+    getline(moviesFile, line); // header
+    while (getline(moviesFile, line)) {
+        char *movieIdString = strtok((char *) line.c_str(), ",\n");
+        auto movieId = (unsigned int) strtol(movieIdString, nullptr, 10);
+        char *movieTitle;
+        if (line.find('"') != string::npos) {
+            // if the name contains quotes
+            movieTitle = strtok(nullptr, "\"");
+        } else
+            movieTitle = strtok(nullptr, ",\n");
+        movieIdNameMapping[movieId] = movieTitle;
+    }
+    return movieIdNameMapping;
 }
 
 
@@ -81,14 +105,14 @@ void displayRatingMatrix(RatingsMatrixCSR &ratingMatrix) {
 }
 
 void initSimilarityMatrix(SimilarityMatrix &similarityMatrix) {
-    similarityMatrix.similarities = (float *) malloc(sizeof(float) * similarityMatrix.length * similarityMatrix.width);
-    memset(similarityMatrix.similarities, 0, sizeof(float) * similarityMatrix.length * similarityMatrix.width);
+    similarityMatrix.similarities = (float *) malloc(sizeof(float) * similarityMatrix.size * similarityMatrix.size);
+    memset(similarityMatrix.similarities, 0, sizeof(float) * similarityMatrix.size * similarityMatrix.size);
 }
 
 void displaySimilarityMatrix(SimilarityMatrix &similarityMatrix) {
-    for (unsigned int i = 0; i < similarityMatrix.length; i++) {
-        for (unsigned int j = 0; j < similarityMatrix.width; j++) {
-            unsigned int index = i * similarityMatrix.width + j;
+    for (unsigned int i = 0; i < similarityMatrix.size; i++) {
+        for (unsigned int j = 0; j < similarityMatrix.size; j++) {
+            unsigned int index = i * similarityMatrix.size + j;
             cout << fixed << setprecision(3) << similarityMatrix.similarities[index] << "\t";
         }
         cout << endl;
@@ -113,4 +137,23 @@ void normalizeRatingVectors(RatingsMatrixCSR &ratingsMatrix) {
         ratingsMatrix.userMean.push_back(mean);
         ratingsMatrix.userEuclideanNorm.push_back(sqrtf(sumOfSquares));
     }
+}
+
+void displayRecommendations(vector<ItemRating> &recommendations, map<unsigned int, string> &movieIdNameMapping) {
+    for (ItemRating recommendation: recommendations) {
+        cout << left << setw(10) << setfill(' ')
+             << fixed << recommendation.item
+             << left << setw(70) << setfill(' ')
+             << fixed << movieIdNameMapping[recommendation.item]
+             << right << setw(10) << setfill(' ')
+             << fixed << setprecision(3) << recommendation.rating << endl;
+    }
+}
+
+vector<unsigned int> getMovieIds(map<unsigned int, string> &movieIdNameMapping) {
+    vector<unsigned int> movieIds;
+    for (auto &iter : movieIdNameMapping)
+        movieIds.push_back(iter.first);
+    sort(movieIds.begin(), movieIds.end());
+    return movieIds;
 }

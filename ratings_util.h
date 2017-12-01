@@ -2,21 +2,38 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <map>
 #include <iomanip>
 #include <cstring>
+#include <stdexcept>
 
 using namespace std;
 
-// for sorting composite item-wise ratings
+// for sorting composite item-wise ratings and recommendations
 
 typedef struct ItemRating {
     unsigned int item;
     float rating;
 
-    bool operator<(ItemRating &itemRating) {
-        return (item < itemRating.item);
+    bool operator<(const ItemRating &itemRating) const {
+        return item < itemRating.item;
+    }
+
+    bool operator>(const ItemRating &itemRating) const {
+        return rating > itemRating.rating;
     }
 } ItemRating;
+
+// for sorting similarity vector
+
+typedef struct Similarity {
+    unsigned int userId;
+    float similarityValue;
+
+    bool operator>(const Similarity &similarity) const {
+        return similarityValue > similarity.similarityValue;
+    }
+} Similarity;
 
 typedef struct {
     vector<float> data;
@@ -26,7 +43,7 @@ typedef struct {
     vector<float> userMean;
 } RatingsMatrixCSR;
 
-RatingsMatrixCSR *readInputRatings(string file);
+RatingsMatrixCSR *readInputRatings(string &file);
 
 void displayRatingMatrix(RatingsMatrixCSR &ratingMatrix);
 
@@ -34,10 +51,15 @@ void normalizeRatingVectors(RatingsMatrixCSR &ratingsMatrix);
 
 typedef struct SimilarityMatrix {
     float *similarities;
-    unsigned int length;
-    unsigned int width;
+    unsigned int size;
 } SimilarityMatrix;
 
 void initSimilarityMatrix(SimilarityMatrix &similarityMatrix);
 
 void displaySimilarityMatrix(SimilarityMatrix &similarityMatrix);
+
+void displayRecommendations(vector<ItemRating> &recommendations, map<unsigned int, string> &movieIdNameMapping);
+
+map<unsigned int, string> readInputMovies(string &file);
+
+vector<unsigned int> getMovieIds(map<unsigned int, string> &movieIdNameMapping);
