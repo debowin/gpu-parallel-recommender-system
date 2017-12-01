@@ -4,20 +4,19 @@
 
 int main(int argc, char *argv[]) {
     // read input and construct user rating matrix
-    string ratingsFileName, moviesFileName;
-    unsigned int userId, n;
-    if (argc != 5) {
-        cout << "Usage: parallel-recommenders <path-to-rating-csv> <path-to-movie-csv> <user-id> <n>" << endl;
+    if (argc != 6) {
+        cout << "Usage: parallel-recommenders <path-to-rating-csv> <path-to-movie-csv> <delimiter> <user-id> <n>" << endl;
         exit(1);
     }
-    ratingsFileName = argv[1];
-    moviesFileName = argv[2];
-    userId = (unsigned int) strtol(argv[3], nullptr, 10);
-    n = (unsigned int) strtol(argv[4], nullptr, 10);
+    string ratingsFileName = argv[1];
+    string moviesFileName = argv[2];
+    char *delim = argv[3];
+    auto userId = (unsigned int) strtol(argv[4], nullptr, 10);
+    auto n = (unsigned int) strtol(argv[5], nullptr, 10);
 
     RatingsMatrixCSR *ratingMatrix;
     try {
-        ratingMatrix = readInputRatings(ratingsFileName);
+        ratingMatrix = readInputRatings(ratingsFileName, delim);
     } catch (invalid_argument &err) {
         cout << err.what() << ratingsFileName << endl;
         exit(2);
@@ -26,7 +25,7 @@ int main(int argc, char *argv[]) {
     map<unsigned int, string> movieIdNameMapping;
     vector<unsigned int> movieIds;
     try {
-        movieIdNameMapping = readInputMovies(moviesFileName);
+        movieIdNameMapping = readInputMovies(moviesFileName, delim);
     } catch (invalid_argument &err) {
         cout << err.what() << ratingsFileName << endl;
         exit(2);

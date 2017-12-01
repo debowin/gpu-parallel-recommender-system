@@ -1,7 +1,7 @@
 #include <algorithm>
 #include "ratings_util.h"
 
-RatingsMatrixCSR *readInputRatings(string &file) {
+RatingsMatrixCSR *readInputRatings(string &file, char *delim) {
 
     ifstream ratingsFile;
     // open the ratings file
@@ -21,7 +21,7 @@ RatingsMatrixCSR *readInputRatings(string &file) {
 
     while (ratingsFile >> line) {
         // update row ptr
-        char *userId = strtok((char *) line.c_str(), ",\n");
+        char *userId = strtok((char *) line.c_str(), delim);
         if (currUserId != strtol(userId, nullptr, 10)) {
             ratingsMatrix->rowPtrs.push_back(totalRatings);
             currUserId = (unsigned int) strtol(userId, nullptr, 10);
@@ -35,11 +35,11 @@ RatingsMatrixCSR *readInputRatings(string &file) {
         }
 
         //update col idx 
-        char *itemIdString = strtok(nullptr, ",");
+        char *itemIdString = strtok(nullptr, delim);
         auto itemId = (unsigned int) strtol(itemIdString, nullptr, 10);
 
         //update rating
-        char *ratingString = strtok(nullptr, ",");
+        char *ratingString = strtok(nullptr, delim);
         auto rating = strtof(ratingString, nullptr);
         itemRatings.push_back(ItemRating{itemId, rating});
 
@@ -58,7 +58,7 @@ RatingsMatrixCSR *readInputRatings(string &file) {
 }
 
 
-map<unsigned int, string> readInputMovies(string &file) {
+map<unsigned int, string> readInputMovies(string &file, char *delim) {
     ifstream moviesFile;
     map<unsigned int, string> movieIdNameMapping;
     // open the ratings file
@@ -69,14 +69,14 @@ map<unsigned int, string> readInputMovies(string &file) {
 
     getline(moviesFile, line); // header
     while (getline(moviesFile, line)) {
-        char *movieIdString = strtok((char *) line.c_str(), ",\n");
+        char *movieIdString = strtok((char *) line.c_str(), delim);
         auto movieId = (unsigned int) strtol(movieIdString, nullptr, 10);
         char *movieTitle;
         if (line.find('"') != string::npos) {
             // if the name contains quotes
             movieTitle = strtok(nullptr, "\"");
         } else
-            movieTitle = strtok(nullptr, ",\n");
+            movieTitle = strtok(nullptr, delim);
         movieIdNameMapping[movieId] = movieTitle;
     }
     return movieIdNameMapping;

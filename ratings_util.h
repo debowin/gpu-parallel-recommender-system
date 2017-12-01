@@ -43,7 +43,7 @@ typedef struct {
     vector<float> userMean;
 } RatingsMatrixCSR;
 
-RatingsMatrixCSR *readInputRatings(string &file);
+RatingsMatrixCSR *readInputRatings(string &file, char *delim);
 
 void displayRatingMatrix(RatingsMatrixCSR &ratingMatrix);
 
@@ -60,6 +60,6 @@ void displaySimilarityMatrix(SimilarityMatrix &similarityMatrix);
 
 void displayRecommendations(vector<ItemRating> &recommendations, map<unsigned int, string> &movieIdNameMapping);
 
-map<unsigned int, string> readInputMovies(string &file);
+map<unsigned int, string> readInputMovies(string &file, char *delim);
 
 vector<unsigned int> getMovieIds(map<unsigned int, string> &movieIdNameMapping);
