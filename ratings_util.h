@@ -1,8 +1,9 @@
 #include <iostream>
-#include <stdlib.h>
 #include <fstream>
-#include <string.h>
+#include <string>
 #include <vector>
+#include <iomanip>
+#include <cstring>
 
 using namespace std;
 
@@ -21,7 +22,6 @@ typedef struct {
     vector<float> data;
     vector<unsigned int> cols;
     vector<unsigned int> rowPtrs;
-    vector<unsigned int> userIds;
     vector<float> userEuclideanNorm;
     vector<float> userMean;
 } RatingsMatrixCSR;

@@ -8,8 +8,8 @@ RatingsMatrixCSR *readInputRatings(string file) {
     ratingsFile.open(file);
 
     string line;
-    int curr_userid = -1;
-    unsigned int total_ratings = 0;
+    unsigned int currUserId = 0;
+    unsigned int totalRatings = 0;
 
     auto *ratingsMatrix = (RatingsMatrixCSR *) malloc(sizeof(RatingsMatrixCSR));
 
@@ -18,12 +18,11 @@ RatingsMatrixCSR *readInputRatings(string file) {
     vector<ItemRating> itemRatings;
 
     while (ratingsFile >> line) {
-        //update row ptr
+        // update row ptr
         char *userId = strtok((char *) line.c_str(), ",\n");
-        if (curr_userid != atoi(userId)) {
-            ratingsMatrix->rowPtrs.push_back(total_ratings);
-            ratingsMatrix->userIds.push_back((unsigned int) atoi(userId));
-            curr_userid = atoi(userId);
+        if (currUserId != strtol(userId, nullptr, 10)) {
+            ratingsMatrix->rowPtrs.push_back(totalRatings);
+            currUserId = (unsigned int) strtol(userId, nullptr, 10);
             // sort and add previous users' item-wise ratings
             sort(itemRatings.begin(), itemRatings.end());
             for (ItemRating itemRating: itemRatings) {
@@ -35,20 +34,20 @@ RatingsMatrixCSR *readInputRatings(string file) {
 
         //update col idx 
         char *itemIdString = strtok(nullptr, ",");
-        auto itemId = (unsigned int) atoi(itemIdString);
+        auto itemId = (unsigned int) strtol(itemIdString, nullptr, 10);
 
 //        ratingsMatrix->cols.push_back(itemId);
 
         //update rating
         char *ratingString = strtok(nullptr, ",");
-        auto rating = (float) atof(ratingString);
+        auto rating = strtof(ratingString, nullptr);
 //        ratingsMatrix->data.push_back();
         itemRatings.push_back(ItemRating{itemId, rating});
 
         //increment ratings
-        total_ratings++;
+        totalRatings++;
     }
-    ratingsMatrix->rowPtrs.push_back(total_ratings);
+    ratingsMatrix->rowPtrs.push_back(totalRatings);
     // sort and add last users' item-wise ratings
     sort(itemRatings.begin(), itemRatings.end());
     for (ItemRating itemRating: itemRatings) {
@@ -79,12 +78,6 @@ void displayRatingMatrix(RatingsMatrixCSR &ratingMatrix) {
         cout << i << " ";
     }
     cout << endl;
-
-    cout << "User Ids:" << endl;
-    for (unsigned int i : ratingMatrix.userIds) {
-        cout << i << " ";
-    }
-    cout << endl;
 }
 
 void initSimilarityMatrix(SimilarityMatrix &similarityMatrix) {
@@ -96,7 +89,7 @@ void displaySimilarityMatrix(SimilarityMatrix &similarityMatrix) {
     for (unsigned int i = 0; i < similarityMatrix.length; i++) {
         for (unsigned int j = 0; j < similarityMatrix.width; j++) {
             unsigned int index = i * similarityMatrix.width + j;
-            cout << similarityMatrix.similarities[index] << " ";
+            cout << fixed << setprecision(3) << similarityMatrix.similarities[index] << "\t";
         }
         cout << endl;
     }

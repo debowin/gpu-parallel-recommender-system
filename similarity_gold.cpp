@@ -2,8 +2,8 @@
 #include "similarity_gold.h"
 
 SimilarityMatrix computeSimilarity(RatingsMatrixCSR &ratingMatrix) {
-    SimilarityMatrix similarityMatrix = {nullptr, (unsigned int) ratingMatrix.userIds.size(),
-                                         (unsigned int) ratingMatrix.userIds.size()};
+    SimilarityMatrix similarityMatrix = {nullptr, (unsigned int) ratingMatrix.rowPtrs.size() - 1,
+                                         (unsigned int) ratingMatrix.rowPtrs.size() - 1};
     initSimilarityMatrix(similarityMatrix);
 
     for (unsigned int i = 0; i < ratingMatrix.rowPtrs.size() - 2; i++) {
@@ -19,9 +19,8 @@ SimilarityMatrix computeSimilarity(RatingsMatrixCSR &ratingMatrix) {
 }
 
 float calculatePearsonCorrelation(RatingsMatrixCSR &ratingsMatrix, unsigned int user1, unsigned int user2) {
-    int start1 = ratingsMatrix.rowPtrs[user1], start2 = ratingsMatrix.rowPtrs[user2];
     int end1 = ratingsMatrix.rowPtrs[user1 + 1], end2 = ratingsMatrix.rowPtrs[user2 + 1];
-    int index1 = start1, index2 = start2;
+    int index1 = ratingsMatrix.rowPtrs[user1], index2 = ratingsMatrix.rowPtrs[user2];
     float similarity = 0.f;
     while (index1 < end1 && index2 < end2) {
         if (ratingsMatrix.cols[index1] == ratingsMatrix.cols[index2]) {
