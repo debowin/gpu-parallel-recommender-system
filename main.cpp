@@ -5,7 +5,7 @@
 int main(int argc, char *argv[]) {
     // read input and construct user rating matrix
     if (argc != 6) {
-        cout << "Usage: parallel-recommenders <path-to-rating-csv> <path-to-movie-csv> <delimiter> <user-id> <n>" << endl;
+        cout << "Usage: parallel-recommenders <path-to-rating-file> <path-to-movie-file> <delimiter> <user-id> <n>" << endl;
         exit(1);
     }
     string ratingsFileName = argv[1];
