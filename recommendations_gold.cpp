@@ -95,10 +95,10 @@ vector<ItemRating> calculateTopNRecommendationsForUserGold(RatingsMatrixCSR &rat
     return recommendations;
 }
 
-int binaryLocate(vector<unsigned int> &array, unsigned int l, unsigned int r, unsigned int target) {
+int binaryLocate(vector<unsigned int> &array, int l, int r, unsigned int target) {
     if (l > r)
         return -1;
-    unsigned int mid = (l + r) / 2;
+    int mid = (l + r) / 2;
     if (target == array[mid])
         return mid;
     else if (target < array[mid])

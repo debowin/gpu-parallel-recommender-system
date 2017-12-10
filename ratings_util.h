@@ -62,4 +62,6 @@ void displayRecommendations(vector<ItemRating> &recommendations, map<unsigned in
 
 map<unsigned int, string> readInputMovies(string &file, char *delim);
 
+vector<unsigned int> readInputUserIds(string &file);
+
 vector<unsigned int> getMovieIds(map<unsigned int, string> &movieIdNameMapping);

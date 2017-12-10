@@ -5,13 +5,14 @@
 int main(int argc, char *argv[]) {
     // read input and construct user rating matrix
     if (argc != 6) {
-        cout << "Usage: parallel-recommenders <path-to-rating-file> <path-to-movie-file> <delimiter> <user-id> <n>" << endl;
+        cout << "Usage: parallel-recommenders <path-to-rating-file> <path-to-movie-file> "
+                "<delimiter> <path-to-input-user-ids> <n>" << endl;
         exit(1);
     }
     string ratingsFileName = argv[1];
     string moviesFileName = argv[2];
     char *delim = argv[3];
-    auto userId = (unsigned int) strtol(argv[4], nullptr, 10);
+    string userIdsFileName = argv[4];
     auto n = (unsigned int) strtol(argv[5], nullptr, 10);
 
     RatingsMatrixCSR *ratingMatrix;
@@ -31,6 +32,14 @@ int main(int argc, char *argv[]) {
         exit(2);
     }
 
+    vector<unsigned int> inputUserIds;
+    try {
+        inputUserIds = readInputUserIds(userIdsFileName);
+    } catch (invalid_argument &err) {
+        cout << err.what() << userIdsFileName << endl;
+        exit(2);
+    }
+
     movieIds = getMovieIds(movieIdNameMapping);
 
     normalizeRatingVectors(*ratingMatrix);
@@ -43,16 +52,18 @@ int main(int argc, char *argv[]) {
     stopTime(&timer);
     cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
 
-    // recommend top n in sequential version (gold)
-    cout << endl << "Calculating Top-" << n << " Recommendations for User #" << userId << endl;
-    startTime(&timer);
-    vector<ItemRating> recommendations = calculateTopNRecommendationsForUserGold(*ratingMatrix,
-                                                                                 similarityMatrix,
-                                                                                 movieIds,
-                                                                                 userId - 1, n);
-    stopTime(&timer);
-    displayRecommendations(recommendations, movieIdNameMapping);
-    cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
+    // recommend top n for given user ids in sequential version (gold)
+    for (unsigned int inputUserId : inputUserIds) {
+        cout << endl << "Calculating Top-" << n << " Recommendations for User #" << inputUserId << endl;
+        startTime(&timer);
+        vector<ItemRating> recommendations = calculateTopNRecommendationsForUserGold(*ratingMatrix,
+                                                                                     similarityMatrix,
+                                                                                     movieIds,
+                                                                                     inputUserId - 1, n);
+        stopTime(&timer);
+        displayRecommendations(recommendations, movieIdNameMapping);
+        cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
+    }
 
     // TODO compute similarity in parallel version (kernel)
 }

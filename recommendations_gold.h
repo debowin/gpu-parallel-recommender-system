@@ -10,4 +10,4 @@ vector<ItemRating> calculateTopNRecommendationsForUserGold(RatingsMatrixCSR &rat
                                                            unsigned int userId,
                                                            unsigned int n);
 
-int binaryLocate(vector<unsigned int> &array, unsigned int l, unsigned int r, unsigned int target);
+int binaryLocate(vector<unsigned int> &array, int l, int r, unsigned int target);

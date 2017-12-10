@@ -82,6 +82,22 @@ map<unsigned int, string> readInputMovies(string &file, char *delim) {
     return movieIdNameMapping;
 }
 
+vector<unsigned int> readInputUserIds(string &userIdsFileName){
+    ifstream userIdsFile;
+    vector<unsigned int> inputUserIds;
+    // open the user ids file
+    userIdsFile.open(userIdsFileName);
+    if (userIdsFile.fail())
+        throw invalid_argument("Unable to open input user ids file ");
+    string line;
+    getline(userIdsFile, line);
+    char *userIdString = strtok((char *) line.c_str(), ",");
+    do{
+        inputUserIds.push_back((unsigned int) strtol(userIdString, nullptr, 10));
+        userIdString = strtok(nullptr, ",");
+    } while(userIdString!= nullptr);
+    return inputUserIds;
+}
 
 void displayRatingMatrix(RatingsMatrixCSR &ratingMatrix) {
     //data
