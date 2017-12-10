@@ -42,9 +42,12 @@ int main(int argc, char *argv[]) {
 
     movieIds = getMovieIds(movieIdNameMapping);
 
-    normalizeRatingVectors(*ratingMatrix);
-
     Timer timer{};
+    startTime(&timer);
+    normalizeRatingVectors(*ratingMatrix);
+    stopTime(&timer);
+    cout << "Normalizing Ratings took " << elapsedTime(timer) << " seconds." << endl;
+
     // compute similarity in sequential version (gold)
     cout << "Computing UU Similarity - Gold" << endl;
     startTime(&timer);
@@ -53,18 +56,23 @@ int main(int argc, char *argv[]) {
     cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
 
     // recommend top n for given user ids in sequential version (gold)
+    cout << endl << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << endl;
+    startTime(&timer);
     for (unsigned int inputUserId : inputUserIds) {
-        cout << endl << "Calculating Top-" << n << " Recommendations for User #" << inputUserId << endl;
-        startTime(&timer);
+        cout << endl << "User #" << inputUserId << endl;
         vector<ItemRating> recommendations = calculateTopNRecommendationsForUserGold(*ratingMatrix,
                                                                                      similarityMatrix,
                                                                                      movieIds,
                                                                                      inputUserId - 1, n);
-        stopTime(&timer);
         displayRecommendations(recommendations, movieIdNameMapping);
-        cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
     }
+    stopTime(&timer);
+    cout << endl << "Took " << setprecision(6) << elapsedTime(timer)
+         << " seconds for " << inputUserIds.size() << " users." << endl;
 
     // TODO compute similarity in parallel version (kernel)
+
+    free(similarityMatrix.similarities);
+    free(ratingMatrix);
 }
 

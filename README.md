@@ -20,7 +20,7 @@ Just use [Jetbrains CLion](https://www.jetbrains.com/clion/). One of the best ID
 * user-id is the ID of the user we're making recommendations for.
 * n is the number of top recommendations to return.
 
-For example, `parallel_recommenders data/ratings.csv data/movies.csv , 2 10` yields..
+For example, `parallel_recommenders data/ratings.csv data/movies.csv , user-ids.txt 10` yields..
 
 | MovieID | Movie Name | Rating|
 |--------|-------------------------------|-------------|
