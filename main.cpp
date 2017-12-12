@@ -1,4 +1,5 @@
 #include "recommendations_gold.h"
+#include "recommendations_kernel.h"
 #include "misc_utls.h"
 
 
@@ -71,6 +72,13 @@ int main(int argc, char *argv[]) {
          << " seconds for " << inputUserIds.size() << " users." << endl;
 
     // TODO compute similarity in parallel version (kernel)
+    startTime(&timer);
+    cout << "\nComputing UU Similarity - Parallel" << endl;
+    SimilarityMatrix similarityMatrixKernel = computeSimilarityParallel(*ratingMatrix);
+    stopTime(&timer);
+    cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
+
+    // TODO compute recommendations    
 
     free(similarityMatrix.similarities);
     free(ratingMatrix);

@@ -1,3 +1,6 @@
+#ifndef RATINGS_UTIL_H
+#define RATINGS_UTIL_H
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -65,3 +68,5 @@ map<unsigned int, string> readInputMovies(string &file, char *delim);
 vector<unsigned int> readInputUserIds(string &file);
 
 vector<unsigned int> getMovieIds(map<unsigned int, string> &movieIdNameMapping);
+
+#endif /* RATINGS_UTIL_H */
