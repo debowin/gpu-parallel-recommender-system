@@ -57,7 +57,7 @@ int main(int argc, char *argv[]) {
     cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
 
     // recommend top n for given user ids in sequential version (gold)
-    cout << endl << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << endl;
+    cout << endl << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << "users." << endl;
     startTime(&timer);
     for (unsigned int inputUserId : inputUserIds) {
         cout << endl << "User #" << inputUserId << endl;
