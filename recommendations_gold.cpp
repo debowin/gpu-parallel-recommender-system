@@ -22,6 +22,10 @@ float calculatePearsonCorrelationGold(RatingsMatrixCSR &ratingsMatrix, unsigned 
     int end1 = ratingsMatrix.rowPtrs[user1 + 1], end2 = ratingsMatrix.rowPtrs[user2 + 1];
     int index1 = ratingsMatrix.rowPtrs[user1], index2 = ratingsMatrix.rowPtrs[user2];
     float similarity = 0.f;
+    float user1Norm = ratingsMatrix.userEuclideanNorm[user1];
+    float user2Norm = ratingsMatrix.userEuclideanNorm[user2];
+    if(!user1Norm || !user2Norm)
+        return 0.0f;
     while (index1 < end1 && index2 < end2) {
         if (ratingsMatrix.cols[index1] == ratingsMatrix.cols[index2]) {
             similarity += ratingsMatrix.data[index1] * ratingsMatrix.data[index2];
@@ -32,7 +36,7 @@ float calculatePearsonCorrelationGold(RatingsMatrixCSR &ratingsMatrix, unsigned 
         else
             index2 += 1;
     }
-    return similarity / (ratingsMatrix.userEuclideanNorm[user1] * ratingsMatrix.userEuclideanNorm[user2]);
+    return similarity / (user1Norm * user2Norm);
 }
 
 vector<ItemRating> calculateTopNRecommendationsForUserGold(RatingsMatrixCSR &ratingsMatrix,

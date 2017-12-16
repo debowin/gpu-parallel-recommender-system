@@ -4,11 +4,11 @@ NVCC_FLAGS  = -std=c++11 -I/usr/local/cuda/include -gencode=arch=compute_60,code
 ifdef dbg
 	NVCC_FLAGS  += -g -G
 else
-	NVCC_FLAGS  += -O2
+	NVCC_FLAGS  += -O3
 endif
 
 LD_FLAGS    = -lcudart -L/usr/local/cuda/lib64
-EXE	    = parallel_recommender
+EXE	    = parallel_recommenders
 OBJ	    = main.o rec_gold.o rec_kernel.o ratings_util.o misc_util.o
 
 default: $(EXE)

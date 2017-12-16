@@ -57,30 +57,34 @@ int main(int argc, char *argv[]) {
     cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
 
     // recommend top n for given user ids in sequential version (gold)
-    cout << endl << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << "users." << endl;
-    startTime(&timer);
-    for (unsigned int inputUserId : inputUserIds) {
-        cout << endl << "User #" << inputUserId << endl;
-        vector<ItemRating> recommendations = calculateTopNRecommendationsForUserGold(*ratingMatrix,
-                                                                                     similarityMatrix,
-                                                                                     movieIds,
-                                                                                     inputUserId - 1, n);
-        displayRecommendations(recommendations, movieIdNameMapping);
-    }
-    stopTime(&timer);
-    cout << endl << "Took " << setprecision(6) << elapsedTime(timer)
-         << " seconds for " << inputUserIds.size() << " users." << endl;
+//    cout << endl << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << "users." << endl;
+//    startTime(&timer);
+//    for (unsigned int inputUserId : inputUserIds) {
+//        cout << endl << "User #" << inputUserId << endl;
+//        vector<ItemRating> recommendations = calculateTopNRecommendationsForUserGold(*ratingMatrix,
+//                                                                                     similarityMatrix,
+//                                                                                     movieIds,
+//                                                                                     inputUserId - 1, n);
+//        displayRecommendations(recommendations, movieIdNameMapping);
+//    }
+//    stopTime(&timer);
+//    cout << endl << "Took " << setprecision(6) << elapsedTime(timer)
+//         << " seconds for " << inputUserIds.size() << " users." << endl;
 
     // TODO compute similarity in parallel version (kernel)
     startTime(&timer);
-    cout << "\nComputing UU Similarity - Parallel" << endl;
+    cout << endl << "Computing UU Similarity - Parallel" << endl;
     SimilarityMatrix similarityMatrixKernel = computeSimilarityParallel(*ratingMatrix);
     stopTime(&timer);
     cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
 
-    // TODO compute recommendations    
+    // TODO compute recommendations in parallel (kernel)
+
+    cout << "Kernel Result Verification: "
+            << (verifySimilarityMatrix(similarityMatrix, similarityMatrixKernel) ? "SUCCESS" : "FAILURE") << endl;
 
     free(similarityMatrix.similarities);
+    free(similarityMatrixKernel.similarities);
     free(ratingMatrix);
 }
 

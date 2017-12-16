@@ -69,4 +69,6 @@ vector<unsigned int> readInputUserIds(string &file);
 
 vector<unsigned int> getMovieIds(map<unsigned int, string> &movieIdNameMapping);
 
+bool verifySimilarityMatrix(SimilarityMatrix &goldMatrix, SimilarityMatrix &kernelMatrix);
+
 #endif /* RATINGS_UTIL_H */

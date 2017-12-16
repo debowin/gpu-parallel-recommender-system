@@ -173,3 +173,20 @@ vector<unsigned int> getMovieIds(map<unsigned int, string> &movieIdNameMapping) 
     sort(movieIds.begin(), movieIds.end());
     return movieIds;
 }
+
+bool verifySimilarityMatrix(SimilarityMatrix &goldMatrix, SimilarityMatrix &kernelMatrix) {
+    unsigned int errorCount = 0;
+    if (goldMatrix.size != kernelMatrix.size)
+        return false;
+    for (int i = 0; i < goldMatrix.size * goldMatrix.size; i++){
+        float error = abs(goldMatrix.similarities[i] - kernelMatrix.similarities[i]);
+        if (error > 0.001f) {
+            // cout << i << " Error: " << setprecision(2) << error << endl;
+            errorCount += 1;
+        }
+    }
+    if (errorCount==0)
+        return true;
+    cout << "Error %age: " << setprecision(2) << (errorCount * 100 / (float)(goldMatrix.size * goldMatrix.size)) << endl;
+    return false;
+}
