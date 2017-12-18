@@ -2,6 +2,10 @@
 #include <queue>
 #include <algorithm>
 
+//TODO tuning
+#define BLOCK_SIZE_REC 64
+#define BLOCK_SIZE_DIV 64 
+
 void allocateDeviceMemory(void ** d_data, size_t size);
 void copyToDeviceMemory(void * d_data, void * h_data, size_t size);
 void copyFromDeviceMemory(void * h_data, void * d_data, size_t size);
@@ -102,30 +106,34 @@ __global__ void csrSimilarityKernelCoarsened(unsigned int dim, unsigned int * cs
     output[row_x + dim * row_y] = similarity/(row_x_norm * row_y_norm);
 }
 
+//shared implementation of csr similarity kernel
 __global__ void csrSimilarityKernelShared(unsigned int dim, unsigned int * csrRowPtr,
                  unsigned int * csrColIdx, float * csrData, float * userEuclideanNorm, float * output) {
 
     // row info
-    __shared__ unsigned int row_start_x; // start index
-    __shared__ unsigned int row_end_x; // end index 
+    __shared__ unsigned int row_start_x_sh; // start index
+    __shared__ unsigned int row_end_x_sh; // end index 
     __shared__ float data_x[TILE_SIZE]; // row data 
     __shared__ unsigned int cols_x[TILE_SIZE];// col ids
-    __shared__ float row_x_norm; // euclidean norm
+    __shared__ float row_x_norm_sh; //euclidean norm
 
     unsigned int tid = threadIdx.x;
     unsigned int row_x = blockIdx.x;
+    
     // initialize row ptrs
     if (tid == 0) {
-        row_start_x = csrRowPtr[row_x];
-        row_end_x = csrRowPtr[row_x + 1];
-        row_x_norm = userEuclideanNorm[row_x];  
+        row_start_x_sh = csrRowPtr[row_x];
+        row_end_x_sh = csrRowPtr[row_x + 1];
+        row_x_norm_sh = userEuclideanNorm[row_x];  
     } 
     // make sure the basic row info is loaded
     __syncthreads(); 
     
-    // load data into shared memory
+    unsigned int row_start_x = row_start_x_sh;
+    unsigned int row_end_x = row_end_x_sh;
     unsigned int tile_idx = tid;
     unsigned int csr_idx = tile_idx + row_start_x;
+    //load csr data into shared memory
     while (csr_idx < row_end_x && tile_idx < TILE_SIZE) {
         data_x[tile_idx] = csrData[csr_idx];
         cols_x[tile_idx] = csrColIdx[csr_idx];
@@ -135,11 +143,13 @@ __global__ void csrSimilarityKernelShared(unsigned int dim, unsigned int * csrRo
     // make sure the row data and col ids are loaded
     __syncthreads();
 
+    
     unsigned int row_y = tid + blockIdx.x + 1;
     unsigned int id_x;
     unsigned int end_x = row_end_x - row_start_x;
     unsigned int id_y;
     unsigned int end_y;
+    float row_x_norm = row_x_norm_sh;
     float row_y_norm; 
     while (row_y < dim) {
        id_x = 0;
@@ -178,10 +188,26 @@ __global__ void csrSimilarityKernelShared(unsigned int dim, unsigned int * csrRo
     } 
 }
 
+//kernel to do vector division to compute final prediction score
+__global__ void computeFinalPredictionScores(ItemRating *recommendations, float *similarities_sum,
+                                            unsigned int rec_size, float userMean)  {
+    unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    float score;
+    if (tid < rec_size) {
+        score = recommendations[tid].rating;
+        float similarity_sum = similarities_sum[tid]; 
+        if (similarity_sum > 0.0f) {
+            score /= similarity_sum;
+            score += userMean;
+            recommendations[tid].rating = score;
+        }
+    }
+}
 
 
+//fetches the item index if it exists
 __device__ int getItemIndex(unsigned int * col_ids, unsigned int count, unsigned int item_id) {
-    //simple search, TODO binary search
+    //simple search
     unsigned int col;
     for (int i = 0; i < count; i++) {
         col = col_ids[i];
@@ -196,21 +222,7 @@ __device__ int getItemIndex(unsigned int * col_ids, unsigned int count, unsigned
 }
 
 
-__global__ void computeFinalPredictionScore(ItemRating *recommendations, float *similarities_sum,
-                                            unsigned int rec_size, float userMean)  {
-    unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
-    float score;
-    if (tid < rec_size) {
-        score = recommendations[tid].rating;
-        if (score != 0) {
-            score /= similarities_sum[tid];
-            score += userMean;
-            recommendations[tid].rating = score;
-        }
-    }
-}
-
-
+//kernel to compute predictions for user
 __global__ void computePredictionsForUserKernel(unsigned int *csrRowPtr, unsigned int *csrColIdx, float *csrData,
                                                 ItemRating *recommendations, Similarity *sortedNeighbours, float *similarities_sum,
                                                 unsigned int rec_size, unsigned int neighbour_size) {
@@ -230,6 +242,7 @@ __global__ void computePredictionsForUserKernel(unsigned int *csrRowPtr, unsigne
         unsigned int row = neighbour.userId;
         row_start_sh = csrRowPtr[row];
         row_end_sh = csrRowPtr[row + 1];
+        //restricting data to TILE size  
         row_count_sh = fminf(TILE_SIZE, row_end_sh - row_start_sh);
     }
     __syncthreads();
@@ -264,7 +277,7 @@ __global__ void computePredictionsForUserKernel(unsigned int *csrRowPtr, unsigne
         if (item_rating.item >  max_item_id) {
             return;
         }
-        //check if item exists in SM
+        //check if item exists in user rated items (col ids)
         if ((item_idx = getItemIndex(cols, row_count, item_rating.item)) != -1) {
             result = data[item_idx] * similarity;
             //atomic add result score (numerator)
@@ -276,8 +289,7 @@ __global__ void computePredictionsForUserKernel(unsigned int *csrRowPtr, unsigne
     }
 }
 
-
-
+//wrapper function to top n recs kernel
 vector<ItemRating> calculateTopNRecommendationsForUserParallel(unsigned int *csrRowPtr_d, unsigned int *csrColIdx_d, float *csrData_d,
                                                  SimilarityMatrix similarityMatrix, vector<unsigned int> movieIds,
                                                  RatingsMatrixCSR &ratingsMatrix, unsigned int userId, unsigned int N) {
@@ -293,15 +305,17 @@ vector<ItemRating> calculateTopNRecommendationsForUserParallel(unsigned int *csr
             item += 1;
     }
 
+    //add similar users into a priority queue
     priority_queue <Similarity, vector<Similarity>, greater<Similarity> > similarUsers;
+    unsigned int neighbourhood_size = similarityMatrix.size/20; //considering 5% more similar users in neighbourhood
     for (unsigned int i = 0; i < similarityMatrix.size; i++) {
+        
         float similarityValue = similarityMatrix.similarities[userId * similarityMatrix.size + i];
         //ignore any similarity that's not positive
-        if (similarityValue <= 0)
+        if (i == userId || similarityValue <= 0)
             continue;
         Similarity currUser = Similarity{i, similarityValue};
-        //TODO define a constant value in header
-        if (similarUsers.size() < 100) {
+        if (similarUsers.size() < neighbourhood_size) {
             similarUsers.push(currUser);
         }
         else {
@@ -328,18 +342,35 @@ vector<ItemRating> calculateTopNRecommendationsForUserParallel(unsigned int *csr
     //initialize all values to 0
     cudaMemset(similaritySum_d, 0, sizeof(float) * recommendations.size());
 
-    
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    float milliseconds = 0.0f;     
+
     //the kernel starts here
     unsigned int noOfBlocks = similarUsers.size();
-    computePredictionsForUserKernel<<<noOfBlocks, BLOCK_SIZE>>>(csrRowPtr_d, csrColIdx_d, csrData_d, recommendations_d,
+    cudaEventRecord(start);
+    computePredictionsForUserKernel<<<noOfBlocks, BLOCK_SIZE_REC>>>(csrRowPtr_d, csrColIdx_d, csrData_d, recommendations_d,
                                            similarUsers_d, similaritySum_d, recommendations.size(), similarUsers.size());
+    cudaEventRecord(stop);
     cudaDeviceSynchronize();
+    cudaEventSynchronize(stop); 
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    printf("Recommendations Kernel exec time: %f ms \n", milliseconds);    
+
 
     float userMean = ratingsMatrix.userMean[userId];
-    noOfBlocks = ceil((float)recommendations.size()/BLOCK_SIZE);
-    computeFinalPredictionScore<<<noOfBlocks, BLOCK_SIZE>>>(recommendations_d, similaritySum_d, recommendations.size(), userMean);
+    noOfBlocks = ceil((float)recommendations.size()/BLOCK_SIZE_DIV);
+
+    cudaEventRecord(start);
+    computeFinalPredictionScores<<<noOfBlocks, BLOCK_SIZE_DIV>>>(recommendations_d, similaritySum_d, recommendations.size(), userMean);
+    cudaEventRecord(stop);
 
     copyFromDeviceMemory(&recommendations[0], recommendations_d, sizeof(ItemRating) * recommendations.size());
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    printf("Division Kernel exec time: %f ms \n", milliseconds);
+
 
     //fetch top N recommendations
     priority_queue <ItemRating, vector<ItemRating>, greater<ItemRating> > topRecommendations;
@@ -355,22 +386,14 @@ vector<ItemRating> calculateTopNRecommendationsForUserParallel(unsigned int *csr
         }
     }
 
-    vector<ItemRating>sortedTopRecs;
-    sortedTopRecs.reserve(N);
-    int count = 1;
-    while(!topRecommendations.empty()) {
-        ItemRating reco = topRecommendations.top();
-        sortedTopRecs[N - count] = reco;
-        topRecommendations.pop();
-        count++;
+    vector<ItemRating> sortedTopRecommendations;
+    while (!topRecommendations.empty()) {
+        sortedTopRecommendations.push_back(topRecommendations.top());
+        topRecommendations.pop();        
     }
 
-    //display sorted top recs
-    for (int i = 0; i < N; i++) {
-        printf("Item:%d - Rating:%f\n", sortedTopRecs[i].item, sortedTopRecs[i].rating);
-    }
-
-    return sortedTopRecs;
+    sort(sortedTopRecommendations.begin(), sortedTopRecommendations.end(), greater<ItemRating>());
+    return sortedTopRecommendations;
 }
 
 
@@ -398,16 +421,16 @@ SimilarityMatrix computeSimilarityParallel(unsigned int dim, unsigned int *csrRo
   
     ////BASIC KERNEL////
  
-    // cudaEventRecord(start);
-    // csrSimilarityKernel<<<grid_dim, block_dim>>>(dim, csrRowPtr_d, csrColIdx_d, csrData_d, userEuclideanNorm_d, output_d);
-    // cudaEventRecord(stop);
+    cudaEventRecord(start);
+    csrSimilarityKernel<<<grid_dim, block_dim>>>(dim, csrRowPtr_d, csrColIdx_d, csrData_d, userEuclideanNorm_d, output_d);
+    cudaEventRecord(stop);
 
     // //display results of kernel 1
-    // copyFromDeviceMemory(similarityMatrix.similarities, output_d, sizeof(float) * (dim * dim));
-    // cudaEventSynchronize(stop);
+    copyFromDeviceMemory(similarities, output_d, sizeof(float) * (dim * dim));
+    cudaEventSynchronize(stop);
 
-    // cudaEventElapsedTime(&milliseconds, start, stop);
-    // printf("Basic Kernel time: %f ms \n",  milliseconds);
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    printf("Basic Kernel time: %f ms \n",  milliseconds);
 
     ////COARSENED KERNEL////
 
@@ -417,7 +440,7 @@ SimilarityMatrix computeSimilarityParallel(unsigned int dim, unsigned int *csrRo
     // cudaEventRecord(stop);
 
     // //display results of kernel 1
-    // copyFromDeviceMemory(similarityMatrix.similarities, output_d, sizeof(float) * (dim * dim));
+    // copyFromDeviceMemory(similarities, output_d, sizeof(float) * (dim * dim));
     // cudaEventSynchronize(stop);
 
     // cudaEventElapsedTime(&milliseconds, start, stop);
@@ -425,20 +448,19 @@ SimilarityMatrix computeSimilarityParallel(unsigned int dim, unsigned int *csrRo
     
     ////SHARED KERNEL////
 
-    cudaEventRecord(start);
-    csrSimilarityKernelShared<<<dim, BLOCK_SIZE>>>(dim, csrRowPtr_d, csrColIdx_d, csrData_d, userEuclideanNorm_d, output_d);
-    cudaEventRecord(stop);
+    //cudaEventRecord(start);
+    //csrSimilarityKernelShared<<<dim, BLOCK_SIZE>>>(dim, csrRowPtr_d, csrColIdx_d, csrData_d, userEuclideanNorm_d, output_d);
+    //cudaEventRecord(stop);
 
-    copyFromDeviceMemory(similarities, output_d, sizeof(float) * (dim * dim));
-    cudaEventSynchronize(stop);
+    //copyFromDeviceMemory(similarities, output_d, sizeof(float) * (dim * dim));
+    //cudaEventSynchronize(stop);
 
-    cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("Shared Kernel time: %f ms \n", milliseconds);
+    //cudaEventElapsedTime(&milliseconds, start, stop);
+    //printf("Shared Kernel time: %f ms \n", milliseconds);
 
     SimilarityMatrix outputSimilarityMatrix = {similarities, dim};
     return outputSimilarityMatrix;
 }
-
 
 void allocateMemoryToDevicePtrs(unsigned int dim, unsigned int **csrRowPtr_d, unsigned int **csrColIdx_d,
                                 float **csrData_d, float **userEuclideanNorm_d,  RatingsMatrixCSR &ratingMatrix) {

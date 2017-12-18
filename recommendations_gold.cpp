@@ -1,5 +1,7 @@
 #include <cmath>
+#include <queue>
 #include <algorithm>
+#include <iostream>
 #include "recommendations_gold.h"
 
 SimilarityMatrix computeSimilarityGold(RatingsMatrixCSR &ratingMatrix) {
@@ -55,7 +57,7 @@ vector<ItemRating> calculateTopNRecommendationsForUserGold(RatingsMatrixCSR &rat
     }
 
     // order neighbors by similarity
-    vector<Similarity> sortedSimilarities;
+    /*vector<Similarity> sortedSimilarities;
     for (unsigned int i = 0; i < similarityMatrix.size; i++) {
         if (similarityMatrix.similarities[userId * similarityMatrix.size + i] <= 0)
             // ignore any similarity that's not positive
@@ -64,16 +66,37 @@ vector<ItemRating> calculateTopNRecommendationsForUserGold(RatingsMatrixCSR &rat
                 Similarity{i, similarityMatrix.similarities[userId * similarityMatrix.size + i]});
     }
     sort(sortedSimilarities.begin(), sortedSimilarities.end(), greater<Similarity>());
+    sortedSimilarities.resize(1000);*/
 
-    unsigned int k = 20;
+    priority_queue <Similarity, vector<Similarity>, greater<Similarity> > similarUsers;
+    unsigned int neighbourhood_size = similarityMatrix.size/20;
+    for (unsigned int i = 0; i < similarityMatrix.size; i++) {
 
+        float similarityValue = similarityMatrix.similarities[userId * similarityMatrix.size + i];
+        if (i == userId || similarityValue <= 0)
+            continue;
+        Similarity currUser = Similarity{i, similarityValue};
+        if (similarUsers.size() < neighbourhood_size) {
+            similarUsers.push(currUser);
+        }
+        else {
+            if (currUser > similarUsers.top()) {
+                similarUsers.pop();
+                similarUsers.push(currUser);
+            }
+        }
+    }
+
+    Similarity * similarUsersArr = (Similarity *) &similarUsers.top();
+    //unsigned int k = 20;
     for (ItemRating &itemRating: recommendations) {
         // for each unrated item
-        unsigned int neighborCount = 0;
+        //unsigned int neighborCount = 0;
         float predictedRating = 0.f;
         float similaritySum = 0.f;
-        // find top k neighbors who have rated item
-        for (auto &sortedSimilarity : sortedSimilarities) {
+        // find neighbors who have rated item
+        for (int i = 0; i < similarUsers.size(); i++) {
+            Similarity sortedSimilarity = similarUsersArr[i];
             // binary search for item in neighbor's rating vector
             int index = binaryLocate(ratingsMatrix.cols, ratingsMatrix.rowPtrs[sortedSimilarity.userId],
                                      ratingsMatrix.rowPtrs[sortedSimilarity.userId + 1] - 1, itemRating.item);
@@ -82,21 +105,45 @@ vector<ItemRating> calculateTopNRecommendationsForUserGold(RatingsMatrixCSR &rat
                 continue;
             predictedRating += sortedSimilarity.similarityValue * ratingsMatrix.data[index];
             similaritySum += sortedSimilarity.similarityValue;
-            neighborCount += 1;
+            //neighborCount += 1;
             // we only need k neighbors
-            if (neighborCount == k)
-                break;
+            //if (neighborCount == k)
+               // break;
         }
-        if (neighborCount > 2)
+        if (similaritySum > 0.f)
             // refuse to predict score for an item with less than 3 neighbors
-            itemRating.rating = predictedRating / similaritySum + ratingsMatrix.userMean[userId];
+            itemRating.rating = (predictedRating / similaritySum) + ratingsMatrix.userMean[userId];
     }
 
-    sort(recommendations.begin(), recommendations.end(), greater<ItemRating>());
+    /*sort(recommendations.begin(), recommendations.end(), greater<ItemRating>());
 
     if (recommendations.size() > n)
         recommendations.resize(n);
-    return recommendations;
+    return recommendations;*/
+
+    //fetch the top n recommendations
+    priority_queue <ItemRating, vector<ItemRating>, greater<ItemRating> > topRecommendations;
+    for (int i = 0; i < recommendations.size(); i++) {
+        if (topRecommendations.size() < n) {
+            topRecommendations.push(recommendations[i]);
+        }
+        else {
+            if (recommendations[i] > topRecommendations.top()) {
+                topRecommendations.pop();
+                topRecommendations.push(recommendations[i]);
+            }
+        }
+    }
+
+    //sort the top n recommendations
+    vector<ItemRating> sortedTopRecommendations;
+    while (!topRecommendations.empty()) {
+        sortedTopRecommendations.push_back(topRecommendations.top());
+        topRecommendations.pop();
+    }
+
+    sort(sortedTopRecommendations.begin(), sortedTopRecommendations.end(), greater<ItemRating>());
+    return sortedTopRecommendations;
 }
 
 int binaryLocate(vector<unsigned int> &array, int l, int r, unsigned int target) {
