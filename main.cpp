@@ -74,7 +74,21 @@ int main(int argc, char *argv[]) {
     // TODO compute similarity in parallel version (kernel)
     startTime(&timer);
     cout << endl << "Computing UU Similarity - Parallel" << endl;
-    SimilarityMatrix similarityMatrixKernel = computeSimilarityParallel(*ratingMatrix);
+
+    //define CUDA device memory ptrs
+    unsigned int *csrRowPtr_d;
+    unsigned int *csrColIdx_d;
+    float *csrData_d;
+    float *userEuclideanNorm_d;
+    unsigned int dim = ratingMatrix->rowPtrs.size() - 1;
+
+    //allocate
+    allocateMemoryToDevicePtrs(dim, &csrRowPtr_d, &csrColIdx_d, &csrData_d, &userEuclideanNorm_d, *ratingMatrix);
+    //copy
+    copyRatingsMatrixToDevicePtrs(dim, csrRowPtr_d, csrColIdx_d, csrData_d, userEuclideanNorm_d, *ratingMatrix);
+    //similarities
+    SimilarityMatrix similarityMatrixKernel = computeSimilarityParallel(dim, csrRowPtr_d, csrColIdx_d, csrData_d, userEuclideanNorm_d);
+    
     stopTime(&timer);
     cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
 
@@ -83,6 +97,18 @@ int main(int argc, char *argv[]) {
     cout << "Kernel Result Verification: "
             << (verifySimilarityMatrix(similarityMatrix, similarityMatrixKernel) ? "SUCCESS" : "FAILURE") << endl;
 
+    cout << endl << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << "users. Parallel" << endl;
+    startTime(&timer);
+    for (unsigned int inputUserId : inputUserIds) {
+          cout << endl << "User #" << inputUserId << endl;
+          //TODO refactor still not appropriate
+          vector<ItemRating> recommendations =  calculateTopNRecommendationsForUserParallel(csrRowPtr_d, csrColIdx_d, csrData_d,
+                                                                similarityMatrixKernel, movieIds, *ratingMatrix, inputUserId - 1, n);
+          displayRecommendations(recommendations, movieIdNameMapping);
+    }
+    stopTime(&timer);
+    cout << endl << "Took " << setprecision(6) << elapsedTime(timer)  << " seconds for " << inputUserIds.size() << " users." << endl;
+    
     free(similarityMatrix.similarities);
     free(similarityMatrixKernel.similarities);
     free(ratingMatrix);

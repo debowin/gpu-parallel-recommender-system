@@ -1,4 +1,6 @@
 #include "recommendations_kernel.h"
+#include <queue>
+#include <algorithm>
 
 void allocateDeviceMemory(void ** d_data, size_t size);
 void copyToDeviceMemory(void * d_data, void * h_data, size_t size);
@@ -177,44 +179,208 @@ __global__ void csrSimilarityKernelShared(unsigned int dim, unsigned int * csrRo
 }
 
 
+
+__device__ int getItemIndex(unsigned int * col_ids, unsigned int count, unsigned int item_id) {
+    //simple search, TODO binary search
+    unsigned int col;
+    for (int i = 0; i < count; i++) {
+        col = col_ids[i];
+        if (item_id == col) {
+            return i;
+        }
+        else if (item_id < col) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
+
+__global__ void computeFinalPredictionScore(ItemRating *recommendations, float *similarities_sum,
+                                            unsigned int rec_size, float userMean)  {
+    unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    float score;
+    if (tid < rec_size) {
+        score = recommendations[tid].rating;
+        if (score != 0) {
+            score /= similarities_sum[tid];
+            score += userMean;
+            recommendations[tid].rating = score;
+        }
+    }
+}
+
+
+__global__ void computePredictionsForUserKernel(unsigned int *csrRowPtr, unsigned int *csrColIdx, float *csrData,
+                                                ItemRating *recommendations, Similarity *sortedNeighbours, float *similarities_sum,
+                                                unsigned int rec_size, unsigned int neighbour_size) {
+     //rating info of neighbour user
+    __shared__ unsigned int row_start_sh;//start index
+    __shared__ unsigned int row_end_sh;//end index
+    __shared__ unsigned int row_count_sh;//total elements
+    __shared__ float data[TILE_SIZE];//row data
+    __shared__ unsigned int cols[TILE_SIZE];//col ids
+    __shared__ Similarity neighbour;
+
+    unsigned int tid = threadIdx.x;
+
+    //load initial row info
+    if (tid == 0) {
+        neighbour = sortedNeighbours[blockIdx.x];
+        unsigned int row = neighbour.userId;
+        row_start_sh = csrRowPtr[row];
+        row_end_sh = csrRowPtr[row + 1];
+        row_count_sh = fminf(TILE_SIZE, row_end_sh - row_start_sh);
+    }
+    __syncthreads();
+
+    //load from Shared Memory to local regs
+    unsigned int row_start = row_start_sh;
+    unsigned int row_end = row_end_sh;
+    unsigned int row_count = row_count_sh;
+
+    unsigned int tile_idx = tid;
+    unsigned int csr_idx = tile_idx + row_start;
+
+    //load user data into shared memory
+    while (csr_idx < row_end && tile_idx < TILE_SIZE) {
+        data[tile_idx] = csrData[csr_idx];
+        cols[tile_idx] = csrColIdx[csr_idx];
+        tile_idx += blockDim.x;
+        csr_idx += blockDim.x;
+    }
+    __syncthreads();
+
+    unsigned int max_item_id = cols[row_count - 1];
+    ItemRating item_rating;
+    unsigned int item_itr = tid;
+    int item_idx;
+    float similarity = neighbour.similarityValue;
+    float result;
+    //iterate through input set of items
+    while (item_itr < rec_size) {
+        item_rating = recommendations[item_itr];
+        //if item id exceeds maximum rated item id then return
+        if (item_rating.item >  max_item_id) {
+            return;
+        }
+        //check if item exists in SM
+        if ((item_idx = getItemIndex(cols, row_count, item_rating.item)) != -1) {
+            result = data[item_idx] * similarity;
+            //atomic add result score (numerator)
+            atomicAdd(&(recommendations[item_itr].rating), result);
+            //atomic add similarity sum (denominator)
+            atomicAdd(&(similarities_sum[item_itr]), similarity);
+        }
+        item_itr += blockDim.x;
+    }
+}
+
+
+
+vector<ItemRating> calculateTopNRecommendationsForUserParallel(unsigned int *csrRowPtr_d, unsigned int *csrColIdx_d, float *csrData_d,
+                                                 SimilarityMatrix similarityMatrix, vector<unsigned int> movieIds,
+                                                 RatingsMatrixCSR &ratingsMatrix, unsigned int userId, unsigned int N) {
+
+    //find the unrated items for this user (same as Gold)
+    vector<ItemRating> recommendations;
+    unsigned int item = ratingsMatrix.rowPtrs[userId];
+    unsigned int end = ratingsMatrix.rowPtrs[userId + 1];
+    for (auto &movieId : movieIds) {
+        if (item >= end || movieId < ratingsMatrix.cols[item])
+            recommendations.push_back(ItemRating{movieId, 0});
+        else if (movieId == ratingsMatrix.cols[item])
+            item += 1;
+    }
+
+    priority_queue <Similarity, vector<Similarity>, greater<Similarity> > similarUsers;
+    for (unsigned int i = 0; i < similarityMatrix.size; i++) {
+        float similarityValue = similarityMatrix.similarities[userId * similarityMatrix.size + i];
+        //ignore any similarity that's not positive
+        if (similarityValue <= 0)
+            continue;
+        Similarity currUser = Similarity{i, similarityValue};
+        //TODO define a constant value in header
+        if (similarUsers.size() < 100) {
+            similarUsers.push(currUser);
+        }
+        else {
+            if (currUser > similarUsers.top()) {
+                similarUsers.pop();
+                similarUsers.push(currUser);
+            }
+        }
+    }
+
+    ItemRating *recommendations_d;
+    Similarity *similarUsers_d;
+    float * similaritySum_d;
+
+    //allocate memory
+    allocateDeviceMemory((void **)&recommendations_d, sizeof(ItemRating) * recommendations.size());
+    allocateDeviceMemory((void **)&similarUsers_d, sizeof(Similarity) * similarUsers.size());
+    allocateDeviceMemory((void **)&similaritySum_d, sizeof(float) * recommendations.size());
+    
+
+    //copy to Device memory
+    copyToDeviceMemory(recommendations_d, &recommendations[0], sizeof(ItemRating) * recommendations.size());
+    copyToDeviceMemory(similarUsers_d, (Similarity *) &similarUsers.top(), sizeof(Similarity) * similarUsers.size());
+    //initialize all values to 0
+    cudaMemset(similaritySum_d, 0, sizeof(float) * recommendations.size());
+
+    
+    //the kernel starts here
+    unsigned int noOfBlocks = similarUsers.size();
+    computePredictionsForUserKernel<<<noOfBlocks, BLOCK_SIZE>>>(csrRowPtr_d, csrColIdx_d, csrData_d, recommendations_d,
+                                           similarUsers_d, similaritySum_d, recommendations.size(), similarUsers.size());
+    cudaDeviceSynchronize();
+
+    float userMean = ratingsMatrix.userMean[userId];
+    noOfBlocks = ceil((float)recommendations.size()/BLOCK_SIZE);
+    computeFinalPredictionScore<<<noOfBlocks, BLOCK_SIZE>>>(recommendations_d, similaritySum_d, recommendations.size(), userMean);
+
+    copyFromDeviceMemory(&recommendations[0], recommendations_d, sizeof(ItemRating) * recommendations.size());
+
+    //fetch top N recommendations
+    priority_queue <ItemRating, vector<ItemRating>, greater<ItemRating> > topRecommendations;
+    for (int i = 0; i < recommendations.size(); i++) {
+        if (topRecommendations.size() < N) {
+            topRecommendations.push(recommendations[i]);
+        }
+        else {
+            if (recommendations[i] > topRecommendations.top()) {
+                topRecommendations.pop();
+                topRecommendations.push(recommendations[i]);
+            }
+        }
+    }
+
+    vector<ItemRating>sortedTopRecs;
+    sortedTopRecs.reserve(N);
+    int count = 1;
+    while(!topRecommendations.empty()) {
+        ItemRating reco = topRecommendations.top();
+        sortedTopRecs[N - count] = reco;
+        topRecommendations.pop();
+        count++;
+    }
+
+    //display sorted top recs
+    for (int i = 0; i < N; i++) {
+        printf("Item:%d - Rating:%f\n", sortedTopRecs[i].item, sortedTopRecs[i].rating);
+    }
+
+    return sortedTopRecs;
+}
+
+
 //wrapper to kernel function
-SimilarityMatrix computeSimilarityParallel(RatingsMatrixCSR &ratingMatrix) {
-   
-    unsigned int dim = ratingMatrix.rowPtrs.size() - 1;
-    SimilarityMatrix similarityMatrix = {nullptr, (unsigned int) dim};
-    //device DS
-    unsigned int *csrRowPtr_d;
-    unsigned int *csrColIdx_d;
-    float *csrData_d;
-    float *userEuclideanNorm_d;
-    float *output_d;    
- 
-    //allocate memory for row ptr
-    allocateDeviceMemory((void **)&csrRowPtr_d, sizeof(unsigned int) * (dim + 1));
-    //allocate memory for col ids
-    allocateDeviceMemory((void **)&csrColIdx_d, sizeof(unsigned int) * ratingMatrix.cols.size());
-    //allocate memory for normalized ratings data
-    allocateDeviceMemory((void **)&csrData_d, sizeof(float) * ratingMatrix.data.size());
-    //allocate memory for user euclidien distance
-    allocateDeviceMemory((void **)&userEuclideanNorm_d, sizeof(float) * ratingMatrix.userEuclideanNorm.size());
+SimilarityMatrix computeSimilarityParallel(unsigned int dim, unsigned int *csrRowPtr_d, unsigned int *csrColIdx_d,
+                                      float *csrData_d,  float *userEuclideanNorm_d) {
+      
+    float *output_d;
     //allocate memory for output
-    allocateDeviceMemory((void **)&output_d, sizeof(float) * (dim * dim));   
-
-    //copy row ptr to Device Memory
-    unsigned int * csrRowPtr = &ratingMatrix.rowPtrs[0];
-    copyToDeviceMemory(csrRowPtr_d, csrRowPtr, sizeof(unsigned int) * (dim + 1));
-    //copy cold ids to Device Memory
-    unsigned int * csrColIdx =  &ratingMatrix.cols[0];
-    copyToDeviceMemory(csrColIdx_d, csrColIdx, sizeof(unsigned int) * ratingMatrix.cols.size());
-    //copy data to Device Memory
-    float * csrData = &ratingMatrix.data[0];
-    copyToDeviceMemory(csrData_d, csrData, sizeof(float) * ratingMatrix.data.size());
-    //copy euclidean norm to device memory
-    float * userEuclideanNorm = &ratingMatrix.userEuclideanNorm[0];
-    copyToDeviceMemory(userEuclideanNorm_d, userEuclideanNorm, sizeof(float) * ratingMatrix.userEuclideanNorm.size());    
-
-    //allocate memory for similarities in host
-    similarityMatrix.similarities = (float *) malloc(sizeof(float) * (dim * dim));
+    allocateDeviceMemory((void **)&output_d, sizeof(float) * (dim * dim));
 
     //call csr kernel 1
     dim3 grid_dim, block_dim;
@@ -227,6 +393,8 @@ SimilarityMatrix computeSimilarityParallel(RatingsMatrixCSR &ratingMatrix) {
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     float milliseconds = 0.0f; 
+
+    float * similarities = (float *)malloc(sizeof(float) * (dim * dim));
   
     ////BASIC KERNEL////
  
@@ -261,23 +429,46 @@ SimilarityMatrix computeSimilarityParallel(RatingsMatrixCSR &ratingMatrix) {
     csrSimilarityKernelShared<<<dim, BLOCK_SIZE>>>(dim, csrRowPtr_d, csrColIdx_d, csrData_d, userEuclideanNorm_d, output_d);
     cudaEventRecord(stop);
 
-    //display results of kernel 2
-    copyFromDeviceMemory(similarityMatrix.similarities, output_d, sizeof(float) * (dim * dim));
+    copyFromDeviceMemory(similarities, output_d, sizeof(float) * (dim * dim));
     cudaEventSynchronize(stop);
-
 
     cudaEventElapsedTime(&milliseconds, start, stop);
     printf("Shared Kernel time: %f ms \n", milliseconds);
 
-    //cudaFree
-    cudaFree(csrRowPtr_d); 
-    cudaFree(csrColIdx_d);
-    cudaFree(csrData_d);
-    cudaFree(userEuclideanNorm_d);
-    cudaFree(output_d);
-
-    return similarityMatrix;
+    SimilarityMatrix outputSimilarityMatrix = {similarities, dim};
+    return outputSimilarityMatrix;
 }
+
+
+void allocateMemoryToDevicePtrs(unsigned int dim, unsigned int **csrRowPtr_d, unsigned int **csrColIdx_d,
+                                float **csrData_d, float **userEuclideanNorm_d,  RatingsMatrixCSR &ratingMatrix) {
+    //allocate memory for row ptr
+    allocateDeviceMemory((void **)csrRowPtr_d, sizeof(unsigned int) * (dim + 1));
+    //allocate memory for col ids
+    allocateDeviceMemory((void **)csrColIdx_d, sizeof(unsigned int) * ratingMatrix.cols.size());
+    //allocate memory for normalized ratings data
+    allocateDeviceMemory((void **)csrData_d, sizeof(float) * ratingMatrix.data.size());
+    //allocate memory for user euclidien distance
+    allocateDeviceMemory((void **)userEuclideanNorm_d, sizeof(float) * ratingMatrix.userEuclideanNorm.size());
+}
+
+void copyRatingsMatrixToDevicePtrs(unsigned int dim, unsigned int *csrRowPtr_d, unsigned int *csrColIdx_d,
+                                   float *csrData_d, float *userEuclideanNorm_d, RatingsMatrixCSR &ratingMatrix) {
+
+    //copy row ptr to Device Memory
+    unsigned int * csrRowPtr = &ratingMatrix.rowPtrs[0];
+    copyToDeviceMemory(csrRowPtr_d, csrRowPtr, sizeof(unsigned int) * (dim + 1));
+    //copy cold ids to Device Memory
+    unsigned int * csrColIdx =  &ratingMatrix.cols[0];
+    copyToDeviceMemory(csrColIdx_d, csrColIdx, sizeof(unsigned int) * ratingMatrix.cols.size());
+    //copy data to Device Memory
+    float * csrData = &ratingMatrix.data[0];
+    copyToDeviceMemory(csrData_d, csrData, sizeof(float) * ratingMatrix.data.size());
+    //copy euclidean norm to device memory
+    float * userEuclideanNorm = &ratingMatrix.userEuclideanNorm[0];
+    copyToDeviceMemory(userEuclideanNorm_d, userEuclideanNorm, sizeof(float) * ratingMatrix.userEuclideanNorm.size());
+}
+
 
 void allocateDeviceMemory(void ** d_data, size_t size) 
 {
