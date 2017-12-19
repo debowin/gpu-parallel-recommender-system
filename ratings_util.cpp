@@ -193,7 +193,7 @@ bool verifySimilarityMatrix(SimilarityMatrix &goldMatrix, SimilarityMatrix &kern
     }
     float errorPercentage = 100 * errorCount/ (float)(goldMatrix.size * goldMatrix.size);
     cout << "Error %age: " << setprecision(2) << errorPercentage << endl;
-    return errorPercentage < 2;
+    return errorPercentage < 1;
 }
 
 bool verifyRecommendations(vector<vector<ItemRating>> &goldRecommendations,

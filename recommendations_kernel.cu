@@ -3,8 +3,6 @@
 #include <algorithm>
 
 //TODO tuning
-#define BLOCK_SIZE_REC 64
-#define BLOCK_SIZE_DIV 64 
 
 void allocateDeviceMemory(void ** d_data, size_t size);
 void copyToDeviceMemory(void * d_data, void * h_data, size_t size);
@@ -350,7 +348,7 @@ vector<ItemRating> calculateTopNRecommendationsForUserParallel(unsigned int *csr
     //the kernel starts here
     unsigned int noOfBlocks = similarUsers.size();
     cudaEventRecord(start);
-    computePredictionsForUserKernel<<<noOfBlocks, BLOCK_SIZE_REC>>>(csrRowPtr_d, csrColIdx_d, csrData_d, recommendations_d,
+    computePredictionsForUserKernel<<<noOfBlocks, BLOCK_SIZE_RECOMMENDATION>>>(csrRowPtr_d, csrColIdx_d, csrData_d, recommendations_d,
                                            similarUsers_d, similaritySum_d, recommendations.size(), similarUsers.size());
     cudaEventRecord(stop);
     cudaDeviceSynchronize();
@@ -360,10 +358,10 @@ vector<ItemRating> calculateTopNRecommendationsForUserParallel(unsigned int *csr
 
 
     float userMean = ratingsMatrix.userMean[userId];
-    noOfBlocks = ceil((float)recommendations.size()/BLOCK_SIZE_DIV);
+    noOfBlocks = ceil((float)recommendations.size()/BLOCK_SIZE_DENORMALIZATION);
 
     cudaEventRecord(start);
-    computeFinalPredictionScores<<<noOfBlocks, BLOCK_SIZE_DIV>>>(recommendations_d, similaritySum_d, recommendations.size(), userMean);
+    computeFinalPredictionScores<<<noOfBlocks, BLOCK_SIZE_DENORMALIZATION>>>(recommendations_d, similaritySum_d, recommendations.size(), userMean);
     cudaEventRecord(stop);
 
     copyFromDeviceMemory(&recommendations[0], recommendations_d, sizeof(ItemRating) * recommendations.size());
@@ -450,14 +448,14 @@ SimilarityMatrix computeSimilarityParallel(unsigned int dim, unsigned int *csrRo
     ////SHARED KERNEL////
 
     cudaEventRecord(start);
-    csrSimilarityKernelShared<<<dim, BLOCK_SIZE>>>(dim, csrRowPtr_d, csrColIdx_d, csrData_d, userEuclideanNorm_d, output_d);
+    csrSimilarityKernelShared<<<dim, BLOCK_SIZE_SIMILARITY>>>(dim, csrRowPtr_d, csrColIdx_d, csrData_d, userEuclideanNorm_d, output_d);
     cudaEventRecord(stop);
 
     copyFromDeviceMemory(similarities, output_d, sizeof(float) * (dim * dim));
     cudaEventSynchronize(stop);
 
     cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("Shared Kernel time: %f ms \n", milliseconds);
+//    printf("Shared Kernel time: %f ms \n", milliseconds);
 
     SimilarityMatrix outputSimilarityMatrix = {similarities, dim};
     return outputSimilarityMatrix;

@@ -61,17 +61,16 @@ int main(int argc, char *argv[]) {
     vector<vector<ItemRating>> userRecommendations;
     startTime(&timer);
     for (unsigned int inputUserId : inputUserIds) {
-        cout << "User #" << inputUserId << endl;
         vector<ItemRating> recommendations = calculateTopNRecommendationsForUserGold(*ratingMatrix,
                                                                                      similarityMatrix,
                                                                                      movieIds,
                                                                                      inputUserId - 1, n);
         userRecommendations.push_back(recommendations);
     }
+    stopTime(&timer);
     for (unsigned int i = 0; i < inputUserIds.size(); i++)
         storeRecommendationsToFile(userRecommendations[i], movieIdNameMapping,
                                    "goldRecommendations_" + to_string(inputUserIds[i]) + ".csv");
-    stopTime(&timer);
     cout << endl << "Took " << setprecision(6) << elapsedTime(timer)
          << " seconds for " << inputUserIds.size() << " users." << endl;
 
@@ -105,7 +104,6 @@ int main(int argc, char *argv[]) {
     vector<vector<ItemRating>> userRecommendationsKernel;
     startTime(&timer);
     for (unsigned int inputUserId : inputUserIds) {
-        cout << "User #" << inputUserId << endl;
         vector<ItemRating> recommendations =  calculateTopNRecommendationsForUserParallel(csrRowPtr_d, csrColIdx_d, csrData_d,
                                                                 similarityMatrixKernel, movieIds, *ratingMatrix, inputUserId - 1, n);
         userRecommendationsKernel.push_back(recommendations);
