@@ -61,7 +61,8 @@ void initSimilarityMatrix(SimilarityMatrix &similarityMatrix);
 
 void displaySimilarityMatrix(SimilarityMatrix &similarityMatrix);
 
-void displayRecommendations(vector<ItemRating> &recommendations, map<unsigned int, string> &movieIdNameMapping);
+void storeRecommendationsToFile(vector<ItemRating> &recommendations,
+                                map<unsigned int, string> &movieIdNameMapping, string fileName);
 
 map<unsigned int, string> readInputMovies(string &file, char *delim);
 
@@ -70,5 +71,8 @@ vector<unsigned int> readInputUserIds(string &file);
 vector<unsigned int> getMovieIds(map<unsigned int, string> &movieIdNameMapping);
 
 bool verifySimilarityMatrix(SimilarityMatrix &goldMatrix, SimilarityMatrix &kernelMatrix);
+
+bool verifyRecommendations(vector<vector<ItemRating>> &goldRecommendations,
+                           vector<vector<ItemRating>> &kernelRecommendations);
 
 #endif /* RATINGS_UTIL_H */

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <set>
 #include "ratings_util.h"
 
 RatingsMatrixCSR *readInputRatings(string &file, char *delim) {
@@ -54,6 +55,7 @@ RatingsMatrixCSR *readInputRatings(string &file, char *delim) {
         ratingsMatrix->cols.push_back(itemRating.item);
     }
     itemRatings.clear();
+    ratingsFile.close();
     return ratingsMatrix;
 }
 
@@ -79,6 +81,7 @@ map<unsigned int, string> readInputMovies(string &file, char *delim) {
             movieTitle = strtok(nullptr, delim);
         movieIdNameMapping[movieId] = movieTitle;
     }
+    moviesFile.close();
     return movieIdNameMapping;
 }
 
@@ -96,6 +99,7 @@ vector<unsigned int> readInputUserIds(string &userIdsFileName){
         inputUserIds.push_back((unsigned int) strtol(userIdString, nullptr, 10));
         userIdString = strtok(nullptr, ",");
     } while(userIdString!= nullptr);
+    userIdsFile.close();
     return inputUserIds;
 }
 
@@ -155,15 +159,17 @@ void normalizeRatingVectors(RatingsMatrixCSR &ratingsMatrix) {
     }
 }
 
-void displayRecommendations(vector<ItemRating> &recommendations, map<unsigned int, string> &movieIdNameMapping) {
+void storeRecommendationsToFile(vector<ItemRating> &recommendations,
+                                map<unsigned int, string> &movieIdNameMapping, string fileName) {
+    ofstream outFile;
+    outFile.open(fileName);
+    outFile << "Movie Id, Movie Title, Score" << endl;
     for (ItemRating recommendation: recommendations) {
-        cout << left << setw(10) << setfill(' ')
-             << fixed << recommendation.item
-             << left << setw(70) << setfill(' ')
-             << fixed << movieIdNameMapping[recommendation.item]
-             << right << setw(10) << setfill(' ')
+        outFile << recommendation.item << ", "
+             << movieIdNameMapping[recommendation.item] << ", "
              << fixed << setprecision(3) << recommendation.rating << endl;
     }
+    outFile.close();
 }
 
 vector<unsigned int> getMovieIds(map<unsigned int, string> &movieIdNameMapping) {
@@ -185,8 +191,30 @@ bool verifySimilarityMatrix(SimilarityMatrix &goldMatrix, SimilarityMatrix &kern
             errorCount += 1;
         }
     }
-    if (errorCount==0)
-        return true;
-    cout << "Error %age: " << setprecision(2) << (errorCount * 100 / (float)(goldMatrix.size * goldMatrix.size)) << endl;
-    return false;
+    float errorPercentage = 100 * errorCount/ (float)(goldMatrix.size * goldMatrix.size);
+    cout << "Error %age: " << setprecision(2) << errorPercentage << endl;
+    return errorPercentage < 2;
+}
+
+bool verifyRecommendations(vector<vector<ItemRating>> &goldRecommendations,
+                           vector<vector<ItemRating>> &kernelRecommendations) {
+    unsigned int errorCount = 0;
+    if(goldRecommendations.size() != kernelRecommendations.size())
+        return false;
+    for(unsigned int i = 0; i < goldRecommendations.size(); i++) {
+        if(goldRecommendations[i].size() != kernelRecommendations[i].size())
+            return false;
+        set<unsigned int> goldSet, kernelSet;
+        for (unsigned int j = 0; j < goldRecommendations[i].size(); j++) {
+            kernelSet.insert(kernelRecommendations[i][j].item);
+            goldSet.insert(goldRecommendations[i][j].item);
+        }
+        vector<unsigned int> intersection;
+        set_intersection(goldSet.begin(), goldSet.end(), kernelSet.begin(),
+                         kernelSet.end(), back_inserter(intersection));
+        errorCount += (goldRecommendations[i].size() - intersection.size());
+    }
+    float errorPercentage = 100 * errorCount / (float)(goldRecommendations.size() * goldRecommendations[0].size());
+    cout << "Error %age: " << setprecision(2) << errorPercentage << endl;
+    return errorPercentage < 5;
 }

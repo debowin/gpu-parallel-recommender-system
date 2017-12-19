@@ -1,6 +1,6 @@
 NVCC        = nvcc
 
-NVCC_FLAGS  = -std=c++11 -I/usr/local/cuda/include -gencode=arch=compute_60,code=\"sm_60\"
+NVCC_FLAGS  = --ptxas-options=-v -std=c++11 -I/usr/local/cuda/include -gencode=arch=compute_60,code=\"sm_60\"
 ifdef dbg
 	NVCC_FLAGS  += -g -G
 else

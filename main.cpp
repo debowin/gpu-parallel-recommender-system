@@ -57,21 +57,25 @@ int main(int argc, char *argv[]) {
     cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
 
     // recommend top n for given user ids in sequential version (gold)
-    cout << endl << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << "users." << endl;
+    cout << endl << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << " users - Gold." << endl;
+    vector<vector<ItemRating>> userRecommendations;
     startTime(&timer);
     for (unsigned int inputUserId : inputUserIds) {
-        cout << endl << "User #" << inputUserId << endl;
+        cout << "User #" << inputUserId << endl;
         vector<ItemRating> recommendations = calculateTopNRecommendationsForUserGold(*ratingMatrix,
                                                                                      similarityMatrix,
                                                                                      movieIds,
                                                                                      inputUserId - 1, n);
-        displayRecommendations(recommendations, movieIdNameMapping);
+        userRecommendations.push_back(recommendations);
     }
+    for (unsigned int i = 0; i < inputUserIds.size(); i++)
+        storeRecommendationsToFile(userRecommendations[i], movieIdNameMapping,
+                                   "goldRecommendations_" + to_string(inputUserIds[i]) + ".csv");
     stopTime(&timer);
     cout << endl << "Took " << setprecision(6) << elapsedTime(timer)
          << " seconds for " << inputUserIds.size() << " users." << endl;
 
-    // TODO compute similarity in parallel version (kernel)
+    // Compute similarity in parallel version (kernel)
     startTime(&timer);
     cout << endl << "Computing UU Similarity - Parallel" << endl;
 
@@ -92,26 +96,32 @@ int main(int argc, char *argv[]) {
     stopTime(&timer);
     cout << endl << "Took " << setprecision(6) << elapsedTime(timer) << " seconds." << endl;
 
-    // TODO compute recommendations in parallel (kernel)
+    // Compute recommendations in parallel (kernel)
 
-    cout << "Kernel Result Verification: "
-            << (verifySimilarityMatrix(similarityMatrix, similarityMatrixKernel) ? "SUCCESS" : "FAILURE") << endl;
+    cout << "Similarity Kernel Result Verification: "
+         << (verifySimilarityMatrix(similarityMatrix, similarityMatrixKernel) ? "SUCCESS" : "FAILURE") << endl;
 
-    cout << endl << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << "users. Parallel" << endl;
+    cout << endl << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << " users - Parallel." << endl;
+    vector<vector<ItemRating>> userRecommendationsKernel;
     startTime(&timer);
     for (unsigned int inputUserId : inputUserIds) {
-          cout << endl << "User #" << inputUserId << endl;
-          //TODO refactor still not appropriate
-          vector<ItemRating> recommendations =  calculateTopNRecommendationsForUserParallel(csrRowPtr_d, csrColIdx_d, csrData_d,
+        cout << "User #" << inputUserId << endl;
+        vector<ItemRating> recommendations =  calculateTopNRecommendationsForUserParallel(csrRowPtr_d, csrColIdx_d, csrData_d,
                                                                 similarityMatrixKernel, movieIds, *ratingMatrix, inputUserId - 1, n);
-          displayRecommendations(recommendations, movieIdNameMapping);
+        userRecommendationsKernel.push_back(recommendations);
     }
     stopTime(&timer);
+    for (unsigned int i = 0; i < inputUserIds.size(); i++)
+        storeRecommendationsToFile(userRecommendationsKernel[i], movieIdNameMapping,
+                                   "kernelRecommendations_" + to_string(inputUserIds[i]) + ".csv");
     cout << endl << "Took " << setprecision(6) << elapsedTime(timer)  << " seconds for " << inputUserIds.size() << " users." << endl;
 
-    //TODO free cuda memories    
+    cout << "Recommendations Kernel Result Verification: "
+         << (verifyRecommendations(userRecommendations, userRecommendationsKernel) ? "SUCCESS" : "FAILURE") << endl;
+
+    // free all memories
+    freeDevicePtrs(csrRowPtr_d, csrColIdx_d, csrData_d, userEuclideanNorm_d);
     free(similarityMatrix.similarities);
     free(similarityMatrixKernel.similarities);
     free(ratingMatrix);
 }
-

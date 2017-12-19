@@ -11,13 +11,13 @@ Just use [Jetbrains CLion](https://www.jetbrains.com/clion/). One of the best ID
 
 ## Usage
 
-`parallel-recommenders <path-to-rating-file> <path-to-movie-file> <delimiter> <user-id> <n>`
+`parallel-recommenders <path-to-rating-file> <path-to-movie-file> <delimiter> <user-id-file> <n>`
 
 * specify path to a valid ratings file.
 * specify path to a valid movies file.
 * delimiter used by these files.
 * sample valid data files [here](http://files.grouplens.org/datasets/movielens/ml-latest-small.zip).
-* user-id is the ID of the user we're making recommendations for.
+* specify path to file with IDs of the users we need to make recommendations for.
 * n is the number of top recommendations to return.
 
 For example, `parallel_recommenders data/ratings.csv data/movies.csv , user-ids.txt 10` yields..
