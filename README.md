@@ -3,11 +3,7 @@ APP Recommender Systems Project
 
 ## Compilation Instructions
 
-`cmake CMakeLists.txt`
-
-OR
-
-Just use [Jetbrains CLion](https://www.jetbrains.com/clion/). One of the best IDEs. Free for students.
+make
 
 ## Usage
 
