@@ -7,7 +7,7 @@ make
 
 ## Usage
 
-`parallel-recommenders <path-to-rating-file> <path-to-movie-file> <delimiter> <user-id-file> <n>`
+`./parallel-recommenders <path-to-rating-file> <path-to-movie-file> <delimiter> <user-id-file> <n>`
 
 * specify path to a valid ratings file.
 * specify path to a valid movies file.
@@ -16,7 +16,7 @@ make
 * specify path to file with IDs of the users we need to make recommendations for.
 * n is the number of top recommendations to return.
 
-For example, `parallel_recommenders data/ratings-20k.dat data/movies.dat :: user-ids.txt 10` yields..
+For example, `./parallel_recommenders data/ratings-20k.dat data/movies.dat :: user-ids.txt 10` yields..
 
  /*** Console Output ***/
  
