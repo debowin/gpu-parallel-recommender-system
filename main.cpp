@@ -60,11 +60,11 @@ int main(int argc, char *argv[]) {
     SimilarityMatrix similarityMatrix = computeSimilarityGold(*ratingMatrix);
     stopTime(&timer);
     simTime = elapsedTime(timer);
-    cout << endl << "Took " << setprecision(6) << simTime << " seconds." << endl;
+    cout << "Took " << setprecision(6) << simTime << " seconds." << endl << endl;
     totalGold += simTime;
 
     // recommend top n for given user ids in sequential version (gold)
-    cout << endl << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << " users - Gold." << endl;
+    cout << "Calculating Top-" << n << " Recommendations for " << inputUserIds.size() << " users - Gold." << endl;
     vector<vector<ItemRating>> userRecommendations;
     startTime(&timer);
     for (unsigned int inputUserId : inputUserIds) {
@@ -80,8 +80,8 @@ int main(int argc, char *argv[]) {
         storeRecommendationsToFile(userRecommendations[i], movieIdNameMapping,
                                    "goldRecommendations_" + to_string(inputUserIds[i]) + ".csv");
     
-    cout << endl << "Took " << setprecision(6) << recTime
-         << " seconds for " << inputUserIds.size() << " users." << endl;
+    cout << "Took " << setprecision(6) << recTime
+         << " seconds for " << inputUserIds.size() << " users." << endl << endl;
     totalGold +=recTime;
     // Compute similarity in parallel version (kernel)
     startTime(&timer);
@@ -103,7 +103,7 @@ int main(int argc, char *argv[]) {
     
     stopTime(&timer);
     simTime2 = elapsedTime(timer);
-    cout << endl << "Took " << setprecision(6) << simTime << " seconds." << endl;
+    cout << "Took " << setprecision(6) << simTime2 << " seconds." << endl;
     totalKernel +=simTime2;
     // Compute recommendations in parallel (kernel)
 
@@ -123,13 +123,13 @@ int main(int argc, char *argv[]) {
     for (unsigned int i = 0; i < inputUserIds.size(); i++)
         storeRecommendationsToFile(userRecommendationsKernel[i], movieIdNameMapping,
                                    "kernelRecommendations_" + to_string(inputUserIds[i]) + ".csv");
-    cout << endl << "Took " << setprecision(6) << recTime  << " seconds for " << inputUserIds.size() << " users." << endl;
+    cout << "Took " << setprecision(6) << recTime2  << " seconds for " << inputUserIds.size() << " users." << endl;
 
     totalKernel += recTime2;
-    printf("\nTotal Kernel Time: %f\n\n", totalKernel);
-    printf("\n Similarity Speedup: %f\n\n",(simTime/simTime2));
-    printf("\n Recommendation Speedup: %f\n\n",(recTime/recTime2));
-    printf("\n Total Speedup: %f\n\n",(totalGold/totalKernel));
+    printf("\nTotal Kernel Time: %f\n", totalKernel);
+    printf("Similarity Speedup: %f\n",(simTime/simTime2));
+    printf("Recommendation Speedup: %f\n",(recTime/recTime2));
+    printf("Total Speedup: %f\n",(totalGold/totalKernel));
 
     cout << "Recommendations Kernel Result Verification: "
          << (verifyRecommendations(userRecommendations, userRecommendationsKernel) ? "SUCCESS" : "FAILURE") << endl;

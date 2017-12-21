@@ -20,17 +20,47 @@ Just use [Jetbrains CLion](https://www.jetbrains.com/clion/). One of the best ID
 * specify path to file with IDs of the users we need to make recommendations for.
 * n is the number of top recommendations to return.
 
-For example, `parallel_recommenders data/ratings.csv data/movies.csv , user-ids.txt 10` yields..
+For example, `parallel_recommenders data/ratings-20k.dat data/movies.dat :: user-ids.txt 10` yields..
 
-| MovieID | Movie Name | Rating|
-|--------|-------------------------------|-------------|
-|116     |  Anne Frank Remembered (1995) |       4.990 |
-|121231  |  It Follows (2014)            |       4.972 |
-|116897  |  Wild Tales (2014)            |       4.954 |
-|3989    |  One Day in September (1999)  |       4.875 |
-|6732    |  Hello, Dolly! (1969)         |       4.838 |
-|7566    | 28 Up (1985)                  |       4.836 |
-|52767   | 21 Up (1977)                  |       4.836 |
-|8264    | Grey Gardens (1975)           |       4.789 |
-|146656  | Creed (2015)                  |       4.780 |
-|3943    | Bamboozled (2000)             |       4.745 |
+ /*** Console Output ***/
+ 
+Normalizing Ratings took 0.010721 seconds.
+
+Computing UU Similarity - Gold
+Took 169.373 seconds.
+
+Calculating Top-10 Recommendations for 10 users - Gold.
+Took 6.86971 seconds for 10 users.
+
+
+Computing UU Similarity - Parallel
+Took 4.26382 seconds.
+Error %age: 0.32
+Similarity Kernel Result Verification: SUCCESS
+
+Calculating Top-10 Recommendations for 10 users - Parallel.
+Took 0.035726 seconds for 10 users.
+
+Total Kernel Time: 4.299544
+
+ Similarity Speedup: 39.723209
+ Recommendation Speedup: 192.288895
+ Total Speedup: 40.990917
+ 
+ Error %age: 0
+Recommendations Kernel Result Verification: SUCCESS
+
+
+/*** Output file "kernelRecommendations_8.csv" which stores recommendations for user 8 ***/
+| MovieID |             Movie Name              | Rating|
+|------------|--------------------------------------- |----------|
+|   5022    |       Servant, The (1963)        | 6.034  |
+|  26495   |        Yellowbeard (1983)        | 6.034  |
+|   3601    | Castaway Cowboy, The (1974)| 5.596|
+|   3642    |     In Old California (1942)     |  5.596 |
+|   3073    |     Sandpiper, The (1965)      |  5.596 |
+|   2820    |            Hamlet (1964)            |   5.596 |
+|    975     | Something to Sing About (1937)  |    5.596   |
+|    790     | Unforgettable Summer, An (Un été inoubliable) (1994)| 5.596    |
+|   3154    |    Blood on the Sun (1945)    |    5.596....|
+|    967     |    Outlaw, The (1943)            |   5.596   |
